@@ -34,7 +34,7 @@ app.use(cors({
   credentials: true
 }));
 // connect to MongoDB
-mongoose.connect("mongodb+srv://farmer:Farm%40123@farmer.zzgbxos.mongodb.net/farmerdb?retryWrites=true&w=majority", {
+mongoose.connect(process.env.mongo_uri, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
