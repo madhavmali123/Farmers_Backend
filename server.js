@@ -4,6 +4,8 @@ const cors = require("cors");
 const { User, Product, Cart } = require("./Models/models");
 const { Crop } = require("./Models/cropModels");
 const multer = require("multer");
+const cloudinary = require("cloudinary").v2;
+const { CloudinaryStorage } = require("multer-storage-cloudinary");
 const path = require("path");
 const fs = require("fs");
 const Razorpay = require("razorpay");
@@ -43,12 +45,28 @@ mongoose.connect(process.env.mongo_uri, {
 
 
 // storage config
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "uploads/"); // folder where images will be stored
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + path.extname(file.originalname)); // unique file name
+// const storage = multer.diskStorage({
+//   destination: (req, file, cb) => {
+//     cb(null, "uploads/"); // folder where images will be stored
+//   },
+//   filename: (req, file, cb) => {
+//     cb(null, Date.now() + path.extname(file.originalname)); // unique file name
+//   },
+// });
+
+// const upload = multer({ storage });
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: "farmers-market", // folder in Cloudinary
+    allowed_formats: ["jpg", "png", "jpeg"],
   },
 });
 
@@ -79,28 +97,6 @@ app.post("/api/payment/create-order", async (req, res) => {
   }
 });
 
-// const crypto = require("crypto");
-
-// app.post("/api/payment/verify", (req, res) => {
-//   try {
-//     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
-
-//     const sign = razorpay_order_id + "|" + razorpay_payment_id;
-//     const expectedSign = crypto
-//       .createHmac("sha256", "YOUR_SECRET")
-//       .update(sign.toString())
-//       .digest("hex");
-
-//     if (razorpay_signature === expectedSign) {
-//       return res.status(200).json({ message: "Payment verified successfully" });
-//     } else {
-//       return res.status(400).json({ message: "Invalid signature sent!" });
-//     }
-//   } catch (error) {
-//     console.error("❌ Error verifying payment:", error);
-//     res.status(500).json({ message: "Server error", error: error.message });
-//   }
-// });
 
 
 //Register API
