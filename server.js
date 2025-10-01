@@ -163,6 +163,7 @@ app.post("/api/login", async (req, res) => {
 });
 
 
+// Route: Add product
 app.post("/api/products/add", upload.single("image"), async (req, res) => {
   try {
     const { name, description, price, quantity, farmerId } = req.body;
@@ -176,10 +177,10 @@ app.post("/api/products/add", upload.single("image"), async (req, res) => {
       return res.status(400).json({ message: "Invalid farmer ID or user is not a farmer" });
     }
 
-    // check if file uploaded
+    // ✅ Cloudinary gives URL directly
     let imageUrl = null;
-    if (req.file) {
-      imageUrl = `/uploads/${req.file.filename}`; // or upload to cloud service
+    if (req.file && req.file.path) {
+      imageUrl = req.file.path; // Cloudinary hosted URL
     }
 
     const newProduct = new Product({
@@ -188,7 +189,7 @@ app.post("/api/products/add", upload.single("image"), async (req, res) => {
       price,
       quantity,
       farmer: farmerId,
-      image: imageUrl, // new field
+      image: imageUrl, // ✅ Cloudinary URL stored in DB
     });
 
     await newProduct.save();
@@ -202,7 +203,6 @@ app.post("/api/products/add", upload.single("image"), async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 });
-
 
 // Get all products of a farmer
 app.get('/api/products/:farmerId', async (req, res) => {
