@@ -15,12 +15,15 @@ const Razorpay = require("razorpay");
 const dotenv = require("dotenv");
 dotenv.config();
 
-app.use(express.json({ limit: "20mb" }));
-app.use(express.urlencoded({ limit: "20mb", extended: true }));
+
 
 
 
 const app = express();
+
+app.use(express.json({ limit: "20mb" }));
+app.use(express.urlencoded({ limit: "20mb", extended: true }));
+
 const razorpay = new Razorpay({
   key_id:process.env.key_id,
   key_secret:process.env.key_secret, 
