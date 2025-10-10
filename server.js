@@ -8,6 +8,7 @@ const multer = require("multer");
 const cloudinary = require("cloudinary").v2;
 const { CloudinaryStorage } = require("multer-storage-cloudinary");
 
+
 const path = require("path");
 const fs = require("fs");
 const Razorpay = require("razorpay");
@@ -21,22 +22,20 @@ dotenv.config();
 
 const app = express();
 
-app.use(express.json({ limit: "20mb" }));
-app.use(express.urlencoded({ limit: "20mb", extended: true }));
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ limit: "10mb", extended: true }));
 
 const razorpay = new Razorpay({
-  key_id:process.env.key_id,
-  key_secret:process.env.key_secret, 
+  key_id: process.env.key_id,
+  key_secret: process.env.key_secret,
 });
-
-
-app.use(express.json());
 //app.use('/uploads', express.static(path.join(__dirname, 'uploads'))); // serve static files
-app.use("/uploads", express.static("uploads"));
+//app.use("/uploads", express.static("uploads"));
 
+// app.use(cors());
 
 app.use(cors({
-  origin: ["http://localhost:5173", "http://127.0.0.1:5173"],
+  origin: ["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:5173"],
   methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true
 }));
@@ -45,8 +44,8 @@ mongoose.connect(process.env.mongo_uri, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
-.then(() => console.log("✅ MongoDB connected"))
-.catch(err => console.error("❌ MongoDB connection error:", err));
+  .then(() => console.log("✅ MongoDB connected"))
+  .catch(err => console.error("❌ MongoDB connection error:", err));
 
 
 // storage config
@@ -62,10 +61,18 @@ mongoose.connect(process.env.mongo_uri, {
 // const upload = multer({ storage });
 
 cloudinary.config({
+  secure: true,
   cloud_name: process.env.CLOUDINARY_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
+
+// console.log("🔹 Cloudinary Config:", {
+//   name: process.env.CLOUDINARY_NAME,
+//   key: process.env.CLOUDINARY_API_KEY ? "✅ Loaded" : "❌ Missing",
+//   secret: process.env.CLOUDINARY_API_SECRET ? "✅ Loaded" : "❌ Missing"
+// });
+
 
 const storage = new CloudinaryStorage({
   cloudinary,
@@ -103,6 +110,66 @@ app.post("/api/payment/create-order", async (req, res) => {
 });
 
 
+// ✅ Cloudinary uploader function (you wanted this)
+const uploadImage = async (imagePath) => {
+  const options = {
+    use_filename: true,
+    unique_filename: false,
+    overwrite: true,
+  };
+
+  try {
+    const result = await cloudinary.uploader.upload(imagePath, options);
+    //console.log("✅ Uploaded to Cloudinary:", result.secure_url);
+    return result.secure_url;
+  } catch (error) {
+    console.error("❌ Cloudinary Upload Error:", error);
+    throw error;
+  }
+};
+// put this once in server.js (remove other duplicate definitions)
+app.post("/api/products/add", upload.single("image"), async (req, res) => {
+  try {
+    // Basic debug logs
+    // console.log("➡️ /api/products/add - body:", req.body);
+    // console.log("➡️ /api/products/add - file:", req.file);
+
+    const { name, description, price, quantity, farmerId } = req.body;
+    if (!name || !price || !farmerId) {
+      return res.status(400).json({ message: "Name, price, and farmerId are required" });
+    }
+
+    const farmer = await User.findById(farmerId);
+    if (!farmer || farmer.type !== "farmer") {
+      return res.status(400).json({ message: "Invalid farmer ID or user is not a farmer" });
+    }
+
+    // get Cloudinary url robustly (different storage libs use different fields)
+    const imageUrl =
+      (req.file && (req.file.path || req.file.secure_url || req.file.url)) ||
+      null;
+
+    const newProduct = new Product({
+      name,
+      description,
+      price,
+      quantity,
+      farmer: farmerId,
+      image: imageUrl,
+    });
+
+    await newProduct.save();
+    console.log("Image file:", imageUrl);
+
+    return res.status(201).json({ message: "Product added successfully", product: newProduct });
+  } catch (err) {
+    console.error("🔥 /api/products/add error:", err);
+    return res
+      .status(500)
+      .json({ message: "Server error while adding product", error: err.message, stack: err.stack });
+  }
+
+});
 
 //Register API
 app.post("/api/register", async (req, res) => {
@@ -159,6 +226,8 @@ app.post("/api/login", async (req, res) => {
         name: user.name,
         email: user.email,
         type: user.type,
+        token: user.token,
+
       },
     });
   } catch (error) {
@@ -167,53 +236,12 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-
-// Route: Add product
-app.post("/api/products/add", upload.single("image"), async (req, res) => {
-  try {
-    const { name, description, price, quantity, farmerId } = req.body;
-
-    if (!name || !price || !farmerId) {
-      return res.status(400).json({ message: "Name, price, and farmerId are required" });
-    }
-
-    const farmer = await User.findById(farmerId);
-    if (!farmer || farmer.type !== "farmer") {
-      return res.status(400).json({ message: "Invalid farmer ID or user is not a farmer" });
-    }
-
-    // ✅ Cloudinary gives URL directly
-    let imageUrl = null;
-    if (req.file && req.file.path) {
-      imageUrl = req.file.path; // Cloudinary hosted URL
-    }
-
-    const newProduct = new Product({
-      name,
-      description,
-      price,
-      quantity,
-      farmer: farmerId,
-      image: imageUrl, // ✅ Cloudinary URL stored in DB
-    });
-
-    await newProduct.save();
-
-    res.status(201).json({
-      message: "Product added successfully",
-      product: newProduct,
-    });
-  } catch (error) {
-    console.error("Error adding product:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
-  }
-});
-
 // Get all products of a farmer
 app.get('/api/products/:farmerId', async (req, res) => {
   try {
     const { farmerId } = req.params;  // ✅ correct
     const products = await Product.find({ farmer: farmerId });
+    console.log(`Fetched products for farmer ${farmerId}:`, products);
 
     if (!products || products.length === 0) {
       return res.status(404).json({ message: "No products found" });
@@ -323,6 +351,25 @@ app.get("/api/cart/:userId", async (req, res) => {
 //     res.status(500).json(err);
 //   }
 // });
+
+app.post("/test-upload", upload.single("image"), async (req, res) => {
+  try {
+    console.log("➡️ /test-upload file:", req.file);
+    if (!req.file) return res.status(400).json({ message: "No file received" });
+
+    const imageUrl = await uploadImage(req.file.path);
+    return res.json({ message: "Upload OK", file: req.file, imageUrl });
+  } catch (err) {
+    console.error("❌ /test-upload error:", err.stack || err);
+    return res.status(500).json({ message: "Upload failed", error: err.message });
+  }
+});
+
+app.get("/api/test", (req, res) => {
+  res.send("Test working!");
+});
+
+
 
 // start server
 const PORT = 8080;
